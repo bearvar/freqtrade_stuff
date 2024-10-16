@@ -2,7 +2,7 @@
 ComplexHyperOptLoss
 
 This module defines the alternative HyperOptLoss class based on:
-  - Profit 
+  - Profit
   - Drawdown
   - Profit Factor
   - Expectancy Ratio
@@ -11,7 +11,10 @@ This module defines the alternative HyperOptLoss class based on:
 
 Possible to change:
   - `DRAWDOWN_MULT` to penalize drawdown objective for individual needs;
-  - `LOG_CONST` to to adjust profit factor impact.
+  - `TARGET_TRADE_AMOUNT` to adjust amount of trades impact.
+  - `EXPECTANCY_CONST` to adjust expectancy ratio impact.
+  - `PF_CONST` to adjust profit factor impact.
+  - `WINRATE_CONST` to adjust winrate impact.
 """
 
 from datetime import datetime
@@ -37,6 +40,7 @@ PF_CONST = 1
 # Coefficient to adjust winrate impact
 WINRATE_CONST = 1.2
 
+
 class ComplexHyperOptLoss(IHyperOptLoss):
     @staticmethod
     def hyperopt_loss_function(
@@ -51,7 +55,7 @@ class ComplexHyperOptLoss(IHyperOptLoss):
         **kwargs,
     ) -> float:
         total_profit = results["profit_abs"].sum()
-        
+
         # Calculate profit factor
         winning_profit = results.loc[results["profit_abs"] > 0, "profit_abs"].sum()
         losing_profit = results.loc[results["profit_abs"] < 0, "profit_abs"].sum()
@@ -66,7 +70,7 @@ class ComplexHyperOptLoss(IHyperOptLoss):
             log_expectancy_ratio = np.log(expectancy_ratio + EXPECTANCY_CONST)
 
         # Calculate winrate
-        winning_trades = results.loc[results['profit_abs'] > 0]
+        winning_trades = results.loc[results["profit_abs"] > 0]
         winrate = len(winning_trades) / len(results)
         log_winrate_coef = np.log(WINRATE_CONST + winrate)
 
@@ -78,25 +82,21 @@ class ComplexHyperOptLoss(IHyperOptLoss):
             relative_account_drawdown = drawdown.relative_account_drawdown
         except ValueError:
             relative_account_drawdown = 0
-        
+
         # Trade Count Penalty
         trade_count_penalty = 1.0  # Default: no penalty
         if trade_count < TARGET_TRADE_AMOUNT:
-            trade_count_penalty = 1 - (abs(trade_count - TARGET_TRADE_AMOUNT) / TARGET_TRADE_AMOUNT) 
+            trade_count_penalty = 1 - (abs(trade_count - TARGET_TRADE_AMOUNT) / TARGET_TRADE_AMOUNT)
             trade_count_penalty = max(trade_count_penalty, 0.1)
-        
-        # Additional penalty for epochs with total trades lower than 20
-        low_trade_count_penalty = 1.0  # Default: no penalty
-        if trade_count <= 20:
-            low_trade_count_penalty = 0.6
-        elif trade_count <= 15:
-            low_trade_count_penalty = 0.5
-        elif trade_count <= 10:
-            low_trade_count_penalty = 0.3
 
-        
-        profit_draw_function = (total_profit - (relative_account_drawdown * total_profit) * (1 - DRAWDOWN_MULT))
+        profit_draw_function = total_profit - (relative_account_drawdown * total_profit) * (
+            1 - DRAWDOWN_MULT
+        )
 
         return -1 * (
-            profit_draw_function * log_profit_factor * log_expectancy_ratio * log_winrate_coef * trade_count_penalty * low_trade_count_penalty
+            profit_draw_function
+            * log_profit_factor
+            * log_expectancy_ratio
+            * log_winrate_coef
+            * trade_count_penalty
         )
